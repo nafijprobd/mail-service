@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mail Service - Admin Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Admin Login Form -->
+        <div id="loginForm" class="card admin-login">
+            <h2>🔐 Admin Login</h2>
+            <div class="form-group">
+                <label for="adminPassword">Password:</label>
+                <input type="password" id="adminPassword" class="form-control" placeholder="Enter admin password">
+            </div>
+            <button onclick="adminLogin()" class="btn btn-primary">Login</button>
+            <div id="loginMessage" class="status-message"></div>
+        </div>
+
+        <!-- Admin Dashboard -->
+        <div id="adminDashboard" style="display: none;">
+            <div class="header">
+                <h1>📧 Mail Service Admin</h1>
+                <p>Manage Gmail accounts and premium access</p>
+                <div class="header-actions">
+                    <a href="/" class="btn btn-secondary">🏠 Home</a>
+                    <a href="/logout" class="btn btn-secondary">🚪 Logout</a>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalAccounts">-</div>
+                        <div class="stat-label">Total Accounts</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="premiumAccounts">-</div>
+                        <div class="stat-label">Premium Accounts</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="publicAccounts">-</div>
+                        <div class="stat-label">Public Accounts</div>
+                    </div>
+                </div>
+
+                <div class="controls">
+                    <button class="btn btn-primary" onclick="loadAccounts()">🔄 Refresh Data</button>
+                    <a href="/auth/google" class="btn btn-primary">🔗 Connect New Account</a>
+                </div>
+
+                <div id="message"></div>
+
+                <div class="table-container">
+                    <table id="accountsTable">
+                        <thead>
+                            <tr>
+                                <th>📧 Email Address</th>
+                                <th>🏷️ Status</th>
+                                <th>📅 Created</th>
+                                <th>🕐 Last Accessed</th>
+                                <th>⚙️ Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountsTableBody">
+                            <tr>
+                                <td colspan="5" class="loading">Please login to view accounts</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isLoggedIn = false;
+        
+        /**
+         * Admin login function
+         */
+        async function adminLogin() {
+            const password = document.getElementById('adminPassword').value;
+            const messageDiv = document.getElementById('loginMessage');
+            
+            if (!password) {
+                showLoginMessage('Please enter password', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/admin/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password }),
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    isLoggedIn = true;
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('adminDashboard').style.display = 'block';
+                    loadAccounts();
+                } else {
+                    showLoginMessage(result.error || 'Login failed', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Login error:', error);
+                showLoginMessage('Login failed: ' + error.message, 'error');
+            }
+        }
+        
+        /**
+         * Show login message
+         */
+        function showLoginMessage(text, type = 'info') {
+            const messageDiv = document.getElementById('loginMessage');
+            messageDiv.className = `status-message ${type}`;
+            messageDiv.textContent = text;
+            messageDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        /**
+         * Display message to user (success or error)
+         */
+        function showMessage(text, type = 'success') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.className = `status-message ${type}`;
+            messageDiv.textContent = text;
+            messageDiv.style.display = 'block';
+            
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                messageDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        /**
+         * Format date for display
+         */
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        }
+
+        /**
+         * Load all accounts from the backend API
+         */
+        async function loadAccounts() {
+            if (!isLoggedIn) return;
+            
+            const tbody = document.getElementById('accountsTableBody');
+            tbody.innerHTML = '<tr><td colspan="5" class="loading">Loading accounts...</td></tr>';
+
+            try {
+                const response = await fetch('/accounts', {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const accounts = data.accounts || [];
+
+                // Update statistics
+                updateStats(accounts);
+
+                if (accounts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 2rem;">No accounts found</td></tr>';
+                    return;
+                }
+
+                // Generate table rows
+                tbody.innerHTML = accounts.map(account => `
+                    <tr>
+                        <td class="email">${account.email}</td>
+                        <td>
+                            <span class="status ${account.isPremium ? 'status-premium' : 'status-public'}">
+                                ${account.isPremium ? '🔒 Premium' : '🌐 Public'}
+                            </span>
+                        </td>
+                        <td class="date">${formatDate(account.createdAt)}</td>
+                        <td class="date">${formatDate(account.lastAccessed)}</td>
+                        <td>
+                            <div class="actions">
+                                ${account.isPremium 
+                                    ? `<button class="btn btn-success" onclick="unlockAccount('${account.email}')">🔓 Unlock</button>`
+                                    : `<button class="btn btn-danger" onclick="lockAccount('${account.email}')">🔒 Lock</button>`
+                                }
+                                <a href="/inbox/${account.email}" class="btn btn-primary" style="font-size: 0.875rem; padding: 0.5rem 1rem;">📬 View Inbox</a>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+
+            } catch (error) {
+                console.error('Error loading accounts:', error);
+                tbody.innerHTML = '<tr><td colspan="5" class="error">Failed to load accounts. Please check your admin permissions.</td></tr>';
+                showMessage('Failed to load accounts: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Update statistics display
+         */
+        function updateStats(accounts) {
+            const total = accounts.length;
+            const premium = accounts.filter(acc => acc.isPremium).length;
+            const public = total - premium;
+
+            document.getElementById('totalAccounts').textContent = total;
+            document.getElementById('premiumAccounts').textContent = premium;
+            document.getElementById('publicAccounts').textContent = public;
+        }
+
+        /**
+         * Lock account (make it premium)
+         */
+        async function lockAccount(email) {
+            if (!confirm(`Are you sure you want to lock account "${email}"? This will make it premium and restrict access.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/lock/${encodeURIComponent(email)}`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(`✅ Account "${email}" has been locked successfully`, 'success');
+                    loadAccounts(); // Refresh the table
+                } else {
+                    throw new Error(result.error || 'Lock operation failed');
+                }
+
+            } catch (error) {
+                console.error('Error locking account:', error);
+                showMessage('❌ Failed to lock account: ' + error.message, 'error');
+            }
+        }
+
+        /**
+         * Unlock account (make it public)
+         */
+        async function unlockAccount(email) {
+            if (!confirm(`Are you sure you want to unlock account "${email}"? This will make it publicly accessible.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/unlock/${encodeURIComponent(email)}`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(`✅ Account "${email}" has been unlocked successfully`, 'success');
+                    loadAccounts(); // Refresh the table
+                } else {
+                    throw new Error(result.error || 'Unlock operation failed');
+                }
+
+            } catch (error) {
+                console.error('Error unlocking account:', error);
+                showMessage('❌ Failed to unlock account: ' + error.message, 'error');
+            }
+        }
+
+        // Event listeners
+        document.getElementById('adminPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                adminLogin();
+            }
+        });
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            if (isLoggedIn) {
+                loadAccounts();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>

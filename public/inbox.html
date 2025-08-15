@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mail Service - Inbox</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📧 Mail Service - Inbox</h1>
+            <p>View your Gmail messages</p>
+            <div class="header-actions">
+                <a href="/" class="btn btn-secondary">🏠 Home</a>
+                <a href="/auth/google" class="btn btn-primary">➕ Add Account</a>
+                <a href="/logout" class="btn btn-secondary">🚪 Logout</a>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="account-selector">
+                <label for="accountSelect">📮 Select Gmail Account:</label>
+                <select id="accountSelect" class="form-control">
+                    <option value="">Loading accounts...</option>
+                </select>
+                <button id="refreshBtn" class="btn btn-primary">🔄 Refresh</button>
+            </div>
+            
+            <div id="statusMessage" class="status-message"></div>
+            
+            <div id="emailList" class="email-list">
+                <div class="loading">Select an account to view emails</div>
+            </div>
+        </div>
+        
+        <div id="emailDetail" class="email-detail" style="display: none;">
+            <button id="backBtn" class="btn btn-secondary">← Back to Inbox</button>
+            <div id="emailContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentAccount = '';
+        let refreshInterval;
+        
+        /**
+         * Load available accounts for the dropdown
+         */
+        async function loadAccounts() {
+            try {
+                const response = await fetch('/available-accounts');
+                const data = await response.json();
+                
+                const select = document.getElementById('accountSelect');
+                select.innerHTML = '<option value="">Select an account...</option>';
+                
+                if (data.accounts && data.accounts.length > 0) {
+                    data.accounts.forEach(account => {
+                        const option = document.createElement('option');
+                        option.value = account.email;
+                        option.textContent = `${account.email} ${account.isPremium ? '🔒' : '🌐'}`;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No accounts available</option>';
+                }
+                
+                // Auto-select first account if available
+                if (data.accounts && data.accounts.length > 0) {
+                    select.value = data.accounts[0].email;
+                    currentAccount = data.accounts[0].email;
+                    loadEmails();
+                }
+                
+            } catch (error) {
+                console.error('Error loading accounts:', error);
+                showStatus('Failed to load accounts', 'error');
+            }
+        }
+        
+        /**
+         * Load emails for the selected account
+         */
+        async function loadEmails() {
+            if (!currentAccount) return;
+            
+            const emailList = document.getElementById('emailList');
+            emailList.innerHTML = '<div class="loading">Loading emails...</div>';
+            
+            try {
+                const response = await fetch(`/inbox/${encodeURIComponent(currentAccount)}`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to load emails');
+                }
+                
+                const data = await response.json();
+                
+                if (data.emails && data.emails.length > 0) {
+                    emailList.innerHTML = data.emails.map(email => `
+                        <div class="email-item" onclick="viewEmail('${email.id}')">
+                            <div class="email-from">${escapeHtml(email.from)}</div>
+                            <div class="email-subject">${escapeHtml(email.subject || 'No Subject')}</div>
+                            <div class="email-snippet">${escapeHtml(email.snippet || '')}</div>
+                            <div class="email-date">${formatDate(email.date)}</div>
+                        </div>
+                    `).join('');
+                    
+                    showStatus(`Loaded ${data.emails.length} emails for ${data.account}`, 'success');
+                } else {
+                    emailList.innerHTML = '<div class="no-emails">No emails found in this inbox</div>';
+                    showStatus('No emails found', 'info');
+                }
+                
+            } catch (error) {
+                console.error('Error loading emails:', error);
+                emailList.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+                showStatus(error.message, 'error');
+            }
+        }
+        
+        /**
+         * View full email content
+         */
+        async function viewEmail(messageId) {
+            if (!currentAccount || !messageId) return;
+            
+            try {
+                const response = await fetch(`/email/${encodeURIComponent(currentAccount)}/${messageId}`);
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to load email');
+                }
+                
+                const email = await response.json();
+                
+                document.getElementById('emailContent').innerHTML = `
+                    <h3>${escapeHtml(email.subject || 'No Subject')}</h3>
+                    <div class="email-meta">
+                        <p><strong>From:</strong> ${escapeHtml(email.from)}</p>
+                        <p><strong>To:</strong> ${escapeHtml(email.to)}</p>
+                        <p><strong>Date:</strong> ${formatDate(email.date)}</p>
+                    </div>
+                    <div class="email-body">
+                        <pre>${escapeHtml(email.body || email.snippet || 'No content available')}</pre>
+                    </div>
+                `;
+                
+                document.getElementById('emailDetail').style.display = 'block';
+                document.querySelector('.card').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error loading email:', error);
+                showStatus(error.message, 'error');
+            }
+        }
+        
+        /**
+         * Go back to inbox view
+         */
+        function goBack() {
+            document.getElementById('emailDetail').style.display = 'none';
+            document.querySelector('.card').style.display = 'block';
+        }
+        
+        /**
+         * Show status message
+         */
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.className = `status-message ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        /**
+         * Format date for display
+         */
+        function formatDate(dateString) {
+            if (!dateString) return 'Unknown date';
+            const date = new Date(dateString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        }
+        
+        /**
+         * Escape HTML to prevent XSS
+         */
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        /**
+         * Start auto-refresh
+         */
+        function startAutoRefresh() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(() => {
+                if (currentAccount) {
+                    loadEmails();
+                }
+            }, 30000); // 30 seconds
+        }
+        
+        /**
+         * Stop auto-refresh
+         */
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+                refreshInterval = null;
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('accountSelect').addEventListener('change', function() {
+            currentAccount = this.value;
+            if (currentAccount) {
+                loadEmails();
+                startAutoRefresh();
+            } else {
+                stopAutoRefresh();
+                document.getElementById('emailList').innerHTML = '<div class="loading">Select an account to view emails</div>';
+            }
+        });
+        
+        document.getElementById('refreshBtn').addEventListener('click', function() {
+            if (currentAccount) {
+                loadEmails();
+            } else {
+                loadAccounts();
+            }
+        });
+        
+        document.getElementById('backBtn').addEventListener('click', goBack);
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAccounts();
+            
+            // Check if email parameter is provided in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const emailParam = urlParams.get('email');
+            if (emailParam) {
+                currentAccount = emailParam;
+                setTimeout(() => {
+                    document.getElementById('accountSelect').value = emailParam;
+                    loadEmails();
+                    startAutoRefresh();
+                }, 1000);
+            }
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', stopAutoRefresh);
+    </script>
+</body>
+</html>
