@@ -134,7 +134,7 @@ app.get('/auth/google/callback', async (req, res) => {
   
   try {
     // Exchange authorization code for tokens
-    const { tokens } = await oauth2Client.getTokens(code);
+    const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
     
     // Get user profile information
