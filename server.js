@@ -29,10 +29,61 @@ app.use(cookieSession({
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/mail-service')
-  .then(() => console.log('✅ Connected to MongoDB'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+// MongoDB Connection with improved configuration
+const mongoUri = process.env.MONGO_URI || 'mongodb+srv://nafijrahaman2026:nafijpro++@mail-service.tirbgc7.mongodb.net/mail-service?retryWrites=true&w=majority&appName=mail-service';
+
+mongoose.connect(mongoUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 30000, // 30 seconds
+  connectTimeoutMS: 30000, // 30 seconds
+  socketTimeoutMS: 30000, // 30 seconds
+  bufferMaxEntries: 0, // Disable mongoose buffering
+  maxPoolSize: 10, // Maintain up to 10 socket connections
+  minPoolSize: 5, // Maintain a minimum of 5 socket connections
+  maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
+  retryWrites: true,
+  w: 'majority'
+})
+.then(() => {
+  console.log('✅ Connected to MongoDB Atlas');
+  console.log('📊 Database ready for operations');
+})
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err.message);
+  console.error('💡 Please check:');
+  console.error('   1. MongoDB Atlas IP whitelist (add 0.0.0.0/0 for all IPs)');
+  console.error('   2. Database credentials are correct');
+  console.error('   3. Network connectivity');
+  
+  // Don't exit the process, let it continue with limited functionality
+  console.log('⚠️  Server will continue without database functionality');
+});
+
+// Handle MongoDB connection events
+mongoose.connection.on('connected', () => {
+  console.log('🔗 Mongoose connected to MongoDB Atlas');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ Mongoose connection error:', err.message);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('🔌 Mongoose disconnected from MongoDB');
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  try {
+    await mongoose.connection.close();
+    console.log('🛑 MongoDB connection closed through app termination');
+    process.exit(0);
+  } catch (err) {
+    console.error('❌ Error during graceful shutdown:', err);
+    process.exit(1);
+  }
+});
 
 // Google OAuth2 Configuration
 const oauth2Client = new google.auth.OAuth2(
@@ -69,6 +120,13 @@ const checkAdmin = (req, res, next) => {
  */
 const checkAccess = async (req, res, next) => {
   try {
+    // Check if MongoDB is connected
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ 
+        error: 'Database temporarily unavailable. Please try again later.' 
+      });
+    }
+    
     const { email } = req.params;
     const userEmail = req.session.userEmail;
     const isAdmin = req.session.isAdmin;
@@ -143,19 +201,31 @@ app.get('/auth/google/callback', async (req, res) => {
     
     const userEmail = profile.email.toLowerCase();
     
-    // Store or update user account in database
-    await Account.findOneAndUpdate(
-      { email: userEmail },
-      { 
-        email: userEmail,
-        refreshToken: tokens.refresh_token,
-        lastAccessed: new Date()
-      },
-      { 
-        upsert: true,
-        new: true 
+    // Store or update user account in database (with error handling)
+    if (mongoose.connection.readyState === 1) {
+      try {
+        await Account.findOneAndUpdate(
+          { email: userEmail },
+          { 
+            email: userEmail,
+            refreshToken: tokens.refresh_token,
+            lastAccessed: new Date()
+          },
+          { 
+            upsert: true,
+            new: true,
+            timeout: 10000 // 10 second timeout
+          }
+        );
+        console.log('✅ User account saved to database:', userEmail);
+      } catch (dbError) {
+        console.error('❌ Database save error:', dbError.message);
+        // Continue without saving to database
+        console.log('⚠️  Continuing without database save');
       }
-    );
+    } else {
+      console.log('⚠️  Database not connected, skipping account save');
+    }
     
     // Store user email in session
     req.session.userEmail = userEmail;
@@ -306,19 +376,30 @@ app.get('/email/:email/:messageId', checkAccess, async (req, res) => {
  */
 app.get('/accounts', checkAdmin, async (req, res) => {
   try {
+    // Check if MongoDB is connected
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ 
+        error: 'Database temporarily unavailable. Please try again later.',
+        accounts: []
+      });
+    }
+    
     const accounts = await Account.find({}, {
       email: 1,
       isPremium: 1,
       createdAt: 1,
       lastAccessed: 1
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 }).timeout(10000);
     
     console.log(`👨‍💼 Admin requested accounts list`);
     res.json({ accounts });
     
   } catch (error) {
     console.error('❌ Accounts fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch accounts' });
+    res.status(500).json({ 
+      error: 'Failed to fetch accounts: ' + error.message,
+      accounts: []
+    });
   }
 });
 
@@ -327,6 +408,14 @@ app.get('/accounts', checkAdmin, async (req, res) => {
  */
 app.get('/available-accounts', async (req, res) => {
   try {
+    // Check if MongoDB is connected
+    if (mongoose.connection.readyState !== 1) {
+      return res.json({ 
+        accounts: [],
+        message: 'Database temporarily unavailable'
+      });
+    }
+    
     const userEmail = req.session.userEmail;
     const isAdmin = req.session.isAdmin;
     
@@ -351,13 +440,16 @@ app.get('/available-accounts', async (req, res) => {
     const accounts = await Account.find(query, {
       email: 1,
       isPremium: 1
-    }).sort({ email: 1 });
+    }).sort({ email: 1 }).timeout(10000);
     
     res.json({ accounts });
     
   } catch (error) {
     console.error('❌ Available accounts fetch error:', error);
-    res.status(500).json({ error: 'Failed to fetch available accounts' });
+    res.json({ 
+      accounts: [],
+      error: 'Failed to fetch available accounts: ' + error.message
+    });
   }
 });
 
