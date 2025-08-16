@@ -59,7 +59,7 @@
                     data.accounts.forEach(account => {
                         const option = document.createElement('option');
                         option.value = account.email;
-                        option.textContent = `${account.email} ${account.isPremium ? '🔒' : '🌐'}`;
+                        option.textContent = `${account.email} ${account.isPremium ? '🔒 Premium' : '🌐 Public'}`;
                         select.appendChild(option);
                     });
                 } else {
@@ -93,6 +93,25 @@
                 
                 if (!response.ok) {
                     const error = await response.json();
+                    
+                    // Handle premium account specifically
+                    if (error.isPremium) {
+                        emailList.innerHTML = `
+                            <div class="premium-account-block">
+                                <div class="premium-icon">🔒</div>
+                                <h3>Premium Account</h3>
+                                <p>This Gmail account is marked as premium and is restricted.</p>
+                                <p><strong>Only the account owner or admin can access these emails.</strong></p>
+                                <div class="premium-actions">
+                                    <a href="/admin" class="btn btn-primary">Contact Admin</a>
+                                    <a href="/auth/google" class="btn btn-secondary">Connect Your Gmail</a>
+                                </div>
+                            </div>
+                        `;
+                        showStatus('This is a premium account. Access restricted.', 'error');
+                        return;
+                    }
+                    
                     throw new Error(error.error || 'Failed to load emails');
                 }
                 
