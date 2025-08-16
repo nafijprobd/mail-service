@@ -160,6 +160,20 @@ app.get('/', (req, res) => {
 });
 
 /**
+ * GET /privacy - Privacy Policy page
+ */
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+});
+
+/**
+ * GET /terms - Terms of Service page
+ */
+app.get('/terms', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'terms.html'));
+});
+
+/**
  * GET /auth/google - Initiate Google OAuth2 flow
  */
 app.get('/auth/google', (req, res) => {
