@@ -131,18 +131,19 @@ const checkAccess = async (req, res, next) => {
       return res.status(404).json({ error: 'Account not found' });
     }
     
-    // Check access permissions
-    const isOwner = userEmail === email.toLowerCase();
-    const isPublicAccess = !account.isPremium;
-    
-    if (isOwner || isAdmin || isPublicAccess) {
-      req.account = account;
-      return next();
+    // If account is premium, only allow access to owner or admin
+    if (account.isPremium) {
+      const isOwner = userEmail === email.toLowerCase();
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ 
+          error: 'This is a premium account. Only the owner or admin can access it.',
+          isPremium: true
+        });
+      }
     }
     
-    return res.status(403).json({ 
-      error: 'Access denied. This is a premium account.' 
-    });
+    req.account = account;
+    return next();
     
   } catch (error) {
     console.error('Access check error:', error);
