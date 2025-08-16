@@ -373,6 +373,45 @@ body {
     margin: 0.25rem;
 }
 
+/* Premium Account Block */
+.premium-account-block {
+    text-align: center;
+    padding: 3rem 2rem;
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    border: 2px solid #f59e0b;
+    border-radius: 12px;
+    margin: 1rem;
+    color: #92400e;
+}
+
+.premium-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.premium-account-block h3 {
+    color: #92400e;
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.premium-account-block p {
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
+.premium-actions {
+    margin-top: 2rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.premium-actions .btn {
+    margin: 0.25rem;
+}
+
 /* Admin Styles */
 .admin-login {
     max-width: 400px;
