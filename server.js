@@ -131,7 +131,7 @@ const checkAccess = async (req, res, next) => {
     const isAdmin = req.session.isAdmin;
     
     // Find the requested account in database
-    const account = await Account.findOne({ email: email.toLowerCase() });
+    const account = await Account.findOne({ email: email.toLowerCase() }).maxTimeMS(10000);
     
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
@@ -459,7 +459,7 @@ app.post('/admin/lock/:email', checkAdmin, async (req, res) => {
   try {
     const { email } = req.params;
     
-    const account = await Account.findOne({ email: email.toLowerCase() });
+    const account = await Account.findOne({ email: email.toLowerCase() }).maxTimeMS(10000);
     
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
@@ -493,7 +493,7 @@ app.post('/admin/unlock/:email', checkAdmin, async (req, res) => {
   try {
     const { email } = req.params;
     
-    const account = await Account.findOne({ email: email.toLowerCase() });
+    const account = await Account.findOne({ email: email.toLowerCase() }).maxTimeMS(10000);
     
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
