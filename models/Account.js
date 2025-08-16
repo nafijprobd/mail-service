@@ -34,4 +34,8 @@ const accountSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Add indexes for better performance
+accountSchema.index({ email: 1 });
+accountSchema.index({ isPremium: 1 });
+accountSchema.index({ createdAt: -1 });
 module.exports = mongoose.model('Account', accountSchema);
