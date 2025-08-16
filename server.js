@@ -35,14 +35,8 @@ const mongoUri = process.env.MONGO_URI || 'mongodb+srv://nafijrahaman2026:nafijp
 mongoose.connect(mongoUri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 30000, // 30 seconds
-  connectTimeoutMS: 30000, // 30 seconds
-  socketTimeoutMS: 30000, // 30 seconds
-  maxPoolSize: 10, // Maintain up to 10 socket connections
-  minPoolSize: 5, // Maintain a minimum of 5 socket connections
-  maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
-  retryWrites: true,
-  w: 'majority'
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
 })
 .then(() => {
   console.log('✅ Connected to MongoDB Atlas');
@@ -131,7 +125,7 @@ const checkAccess = async (req, res, next) => {
     const isAdmin = req.session.isAdmin;
     
     // Find the requested account in database
-    const account = await Account.findOne({ email: email.toLowerCase() }).maxTimeMS(10000);
+    const account = await Account.findOne({ email: email.toLowerCase() });
     
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
@@ -383,12 +377,12 @@ app.get('/accounts', checkAdmin, async (req, res) => {
       });
     }
     
-    const accounts = await Account.find({}, {
+    const accounts = await Account.find({}).select({
       email: 1,
       isPremium: 1,
       createdAt: 1,
       lastAccessed: 1
-    }).sort({ createdAt: -1 }).timeout(10000);
+    }).sort({ createdAt: -1 });
     
     console.log(`👨‍💼 Admin requested accounts list`);
     res.json({ accounts });
@@ -436,10 +430,10 @@ app.get('/available-accounts', async (req, res) => {
       query = { isPremium: false };
     }
     
-    const accounts = await Account.find(query, {
+    const accounts = await Account.find(query).select({
       email: 1,
       isPremium: 1
-    }).sort({ email: 1 }).timeout(10000);
+    }).sort({ email: 1 });
     
     res.json({ accounts });
     
@@ -459,7 +453,7 @@ app.post('/admin/lock/:email', checkAdmin, async (req, res) => {
   try {
     const { email } = req.params;
     
-    const account = await Account.findOne({ email: email.toLowerCase() }).maxTimeMS(10000);
+    const account = await Account.findOne({ email: email.toLowerCase() });
     
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
@@ -493,7 +487,7 @@ app.post('/admin/unlock/:email', checkAdmin, async (req, res) => {
   try {
     const { email } = req.params;
     
-    const account = await Account.findOne({ email: email.toLowerCase() }).maxTimeMS(10000);
+    const account = await Account.findOne({ email: email.toLowerCase() });
     
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
